@@ -108,33 +108,39 @@ def split_model(model, plane_point, plane_normal):
     return np.array(above_vertices), np.array(below_vertices)
 
 # 计算投影并生成渐变色图
+# 计算投影并生成颜色区间渐变图
 def plot_projection_on_section(vertices, section_point, long_axis, output_path, label):
     # 投影到最大截面
     projection_points = []
+    z_values = []  # 存储高度差
     for vertex in vertices:
         projection_point = vertex - np.dot(vertex - section_point, long_axis) * long_axis
-        projection_points.append(projection_point)
+        projection_points.append(projection_point[:2])  # 只取X、Y坐标
+        z_values.append(projection_point[2])  # Z轴值
 
     projection_points = np.array(projection_points)
+    z_values = np.array(z_values)
 
-    # 获取每个点的高度差
-    z_values = projection_points[:, 2]
+    # 设置颜色区间
+    levels = [-2.0, -0.75, -0.25, -0.09, 0.25, 0.75, 1.0, 2.0]
+    colors_list = ['#1f3b7b', '#1976d2', '#4fc3f7', '#90ee90', '#ffff00', '#ffa500', '#ff4500']  # 从深蓝到红色
 
-    # 创建颜色映射
-    norm = plt.Normalize(vmin=np.min(z_values), vmax=np.max(z_values))
-    cmap = plt.get_cmap('coolwarm')
+    # 自定义颜色映射
+    cmap = colors.ListedColormap(colors_list)
+    norm = colors.BoundaryNorm(boundaries=levels, ncolors=len(colors_list))
 
     # 绘制投影图
     plt.figure(figsize=(8, 8))
-    plt.scatter(projection_points[:, 0], projection_points[:, 1], c=z_values, cmap=cmap, norm=norm, s=0.1)
+    plt.scatter(projection_points[:, 0], projection_points[:, 1], c=z_values, cmap=cmap, norm=norm, s=0.5)
     plt.title(f"{label} Model Projection")
     plt.xlabel("X-axis")
     plt.ylabel("Y-axis")
-    plt.colorbar(label="Height (Z-axis)")
+    plt.colorbar(label="Height (Z-axis)", boundaries=levels, ticks=levels)
     plt.axis("equal")
     plt.grid(True)
-    plt.savefig(os.path.join(output_path, f"{label}_projection.png"))
+    plt.savefig(os.path.join(output_path, f"{label}_projection_continuous.png"))
     plt.close()
+
 
 if __name__ == "__main__":
     input_path = os.path.join("input", "below_twenty", "2.stl")
