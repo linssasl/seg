@@ -4,6 +4,8 @@ from stl import mesh
 import matplotlib.pyplot as plt
 from matplotlib import colors
 from scipy.spatial import ConvexHull
+from scipy.interpolate import griddata
+
 
 
 # 加载STL模型
@@ -107,20 +109,19 @@ def split_model(model, plane_point, plane_normal):
 
     return np.array(above_vertices), np.array(below_vertices)
 
-# 计算投影并生成渐变色图
-# 计算投影并生成颜色区间渐变图
+# 绘制热力图，生成连续光滑的图
 def plot_heatmap_on_section(vertices, section_point, long_axis, output_path, label):
     # 计算垂直于 long_axis 的点到平面的距离
     long_axis = long_axis / np.linalg.norm(long_axis)  # 单位化
     distances = np.dot(vertices - section_point, long_axis)  # 点到平面的距离
 
-    # 设置颜色区间
-    levels = [-2.0, -0.75, -0.25, -0.09, 0.25, 0.75, 1.0, 2.0]
-    colors_list = ['#1f3b7b', '#1976d2', '#4fc3f7', '#90ee90', '#ffff00', '#ffa500', '#ff4500']  # 蓝到红
+    # **归一化高度值**
+    min_distance, max_distance = distances.min(), distances.max()
+    normalized_distances = (distances - min_distance) / (max_distance - min_distance)
 
-    # 自定义颜色映射
-    cmap = colors.ListedColormap(colors_list)
-    norm = colors.BoundaryNorm(boundaries=levels, ncolors=len(colors_list))
+    # 设置颜色区间（归一化后为[0, 1]范围）
+    levels = np.linspace(0, 1, 100)  # 更细致的颜色渐变
+    cmap = plt.cm.get_cmap('RdYlBu_r')  # 使用红-黄-蓝渐变颜色
 
     # 计算点的投影到平面
     arbitrary_vec = np.array([1, 0, 0]) if abs(long_axis[0]) < 0.9 else np.array([0, 1, 0])
@@ -136,17 +137,21 @@ def plot_heatmap_on_section(vertices, section_point, long_axis, output_path, lab
         projection_points.append([x, y])
     projection_points = np.array(projection_points)
 
-    # 绘制散点图，颜色根据点到平面的距离变化
-    plt.figure(figsize=(8, 8))
-    plt.scatter(
-        projection_points[:, 0],
-        projection_points[:, 1],
-        c=distances,  # 颜色根据距离变化
-        cmap=cmap,
-        norm=norm,
-        s=0.5  # 点的大小
+    # 使用插值创建平滑的二维网格
+    x = projection_points[:, 0]
+    y = projection_points[:, 1]
+    z = normalized_distances  # 使用归一化后的高度值
+
+    grid_x, grid_y = np.meshgrid(
+        np.linspace(x.min(), x.max(), 500),
+        np.linspace(y.min(), y.max(), 500)
     )
-    plt.colorbar(label="Distance to Section Plane (Z-axis)", boundaries=levels, ticks=levels)
+    grid_z = griddata((x, y), z, (grid_x, grid_y), method='cubic')  # 使用 cubic 插值
+
+    # 绘制等高线图
+    plt.figure(figsize=(8, 8))
+    contour = plt.contourf(grid_x, grid_y, grid_z, levels=levels, cmap=cmap)
+    plt.colorbar(contour, label="Normalized Distance to Section Plane (Z-axis)")
     plt.title(f"{label} Model Heatmap")
     plt.xlabel("X-axis (projected)")
     plt.ylabel("Y-axis (projected)")
@@ -156,6 +161,7 @@ def plot_heatmap_on_section(vertices, section_point, long_axis, output_path, lab
     # 保存图像
     plt.savefig(os.path.join(output_path, f"{label}_heatmap.png"))
     plt.close()
+
 
 if __name__ == "__main__":
     input_path = os.path.join("input", "below_twenty", "2.stl")
